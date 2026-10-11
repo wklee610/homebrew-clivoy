@@ -1,0 +1,237 @@
+name: Homebrew bottles
+
+on:
+  push:
+    branches: [main]
+    paths: [Formula/clivoy.rb]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Formula version to bottle (for example, 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clivoy-bottles
+  cancel-in-progress: false
+
+env:
+  FORMULA: wklee610/clivoy/clivoy
+  HOMEBREW_NO_AUTO_UPDATE: '1'
+  HOMEBREW_NO_INSTALL_CLEANUP: '1'
+  HOMEBREW_NO_ANALYTICS: '1'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      needed: ${{ steps.plan.outputs.needed }}
+      formula_sha: ${{ steps.plan.outputs.formula_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate version and skip existing bottles
+        id: plan
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, os, re
+          from pathlib import Path
+          data = Path('Formula/clivoy.rb').read_bytes()
+          text = data.decode()
+          match = re.search(r'^  version "((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))"$', text, re.M)
+          if not match:
+              raise SystemExit('Expected a stable explicit Formula version')
+          version = match[1]
+          requested = os.environ.get('REQUESTED_VERSION', '')
+          if requested and requested != version:
+              raise SystemExit('Requested version does not match the current Formula')
+          # The bot's bottle-only commit must not start another bottle build.
+          needed = not re.search(r'^  bottle do$', text, re.M)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'version={version}\nneeded={str(needed).lower()}\nformula_sha={hashlib.sha256(data).hexdigest()}\n')
+          print(f'Clivoy {version}: ' + ('build arm64_tahoe bottle' if needed else 'bottle already present; skip'))
+          PY
+
+  bottle:
+    needs: prepare
+    if: needs.prepare.outputs.needed == 'true'
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      FORMULA_SHA: ${{ needs.prepare.outputs.formula_sha }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      # This action also checks out this tap at the triggering commit.
+      - uses: Homebrew/actions/setup-homebrew@1f8e202ffddf94def7f42f6fa3a482e821489f9c # 2026.07.10.1
+        with:
+          stable: true
+          token: ${{ github.token }}
+      - name: Build the bottle with the runner's supported developer tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew config
+          xcodebuild -version
+          test "$(uname -m)" = arm64
+          brew install --build-bottle "$FORMULA"
+          brew test "$FORMULA"
+          mkdir bottles
+          cd bottles
+          brew bottle --json --no-rebuild \
+            --root-url "https://github.com/$GH_REPO/releases/download/clivoy-$VERSION" "$FORMULA"
+      - name: Verify the released binary is unchanged and prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 2 \
+            "https://github.com/wklee610/clivoy/releases/download/v$VERSION/clivoy_${VERSION}_darwin_arm64.tar.gz" \
+            --output "$RUNNER_TEMP/upstream.tar.gz"
+          export CLIVOY_PREFIX="$(brew --prefix "$FORMULA")"
+          python3 - <<'PY'
+          import hashlib, json, os, re, shutil, tarfile
+          from pathlib import Path
+          version = os.environ['VERSION']
+          def digest(data):
+              return hashlib.sha256(data).hexdigest()
+          def binary_digest(path, name):
+              with tarfile.open(path, 'r:gz') as archive:
+                  members = [m for m in archive.getmembers() if m.name.removeprefix('./') == name]
+                  if len(members) != 1 or not members[0].isfile():
+                      raise SystemExit(f'Expected one regular binary: {name}')
+                  return digest(archive.extractfile(members[0]).read())
+          formula = Path('Formula/clivoy.rb').read_bytes()
+          if digest(formula) != os.environ['FORMULA_SHA']:
+              raise SystemExit('Formula changed since prepare')
+          url = f'https://github.com/wklee610/clivoy/releases/download/v{version}/clivoy_{version}_darwin_arm64.tar.gz'
+          match = re.search(r'url "' + re.escape(url) + r'"\s+sha256 "([a-f0-9]{64})"', formula.decode())
+          upstream = Path(os.environ['RUNNER_TEMP']) / 'upstream.tar.gz'
+          if not match or digest(upstream.read_bytes()) != match[1]:
+              raise SystemExit('Upstream archive does not match the published Formula checksum')
+          expected = binary_digest(upstream, 'clivoy')
+          keg = Path(os.environ['CLIVOY_PREFIX'])
+          if digest((keg / 'bin/clivoy').read_bytes()) != expected:
+              raise SystemExit('Homebrew changed the upstream binary in the installed keg')
+          files = list(Path('bottles').glob('*.bottle.json'))
+          if len(files) != 1:
+              raise SystemExit('Expected one bottle JSON')
+          data = json.loads(files[0].read_text())[os.environ['FORMULA']]
+          bottle = data['bottle']
+          root = f"https://github.com/{os.environ['GH_REPO']}/releases/download/clivoy-{version}"
+          if data['formula']['pkg_version'] != version or bottle['root_url'] != root or bottle['rebuild'] != 0:
+              raise SystemExit('Unexpected bottle version, URL or rebuild')
+          if set(bottle['tags']) != {'arm64_tahoe'}:
+              raise SystemExit('Runner did not produce an arm64_tahoe bottle')
+          tag = bottle['tags']['arm64_tahoe']
+          local_name = f'clivoy--{version}.arm64_tahoe.bottle.tar.gz'
+          public_name = f'clivoy-{version}.arm64_tahoe.bottle.tar.gz'
+          if tag['local_filename'] != local_name or tag['filename'] != public_name:
+              raise SystemExit('Unexpected Homebrew bottle filename')
+          archive = Path('bottles') / local_name
+          if digest(archive.read_bytes()) != tag['sha256']:
+              raise SystemExit('Bottle checksum does not match Homebrew JSON')
+          if binary_digest(archive, f'clivoy/{version}/bin/clivoy') != expected:
+              raise SystemExit('Bottling changed the upstream binary')
+          assets = Path('release-assets')
+          assets.mkdir()
+          # Homebrew's public URL has one hyphen; the local filename has two.
+          shutil.copyfile(archive, assets / public_name)
+          shutil.copyfile(files[0], assets / files[0].name)
+          (assets / 'binary.sha256').write_text(f'{expected}  clivoy\n')
+          print(f'Original binary preserved: {expected}')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arm64-tahoe-bottle
+          path: release-assets/*
+          if-no-files-found: error
+      - name: Publish the tap bottle and update only the Formula
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          remote_sha="$(git show origin/main:Formula/clivoy.rb | shasum -a 256 | awk '{print $1}')"
+          test "$remote_sha" = "$FORMULA_SHA" || { echo 'Formula advanced; refusing to publish stale bottles'; exit 1; }
+          git checkout -B main origin/main
+          brew bottle --merge --write --no-commit bottles/*.bottle.json
+          git diff --check
+          test "$(git diff --name-only)" = Formula/clivoy.rb
+          tag="clivoy-$VERSION"
+          cat > "$RUNNER_TEMP/bottle-notes.md" <<EOF
+          Homebrew bottle for Clivoy $VERSION on Apple Silicon macOS Tahoe.
+
+          Install with: brew install wklee610/clivoy/clivoy
+
+          This packages the existing wklee610/clivoy v$VERSION binary without changing it.
+          The original release and its assets are unchanged. binary.sha256 records the executable checksum.
+          EOF
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$(git rev-parse HEAD)" --draft \
+              --title "Clivoy $VERSION Homebrew bottle" --notes-file "$RUNNER_TEMP/bottle-notes.md"
+          fi
+          gh release view "$tag" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/existing-assets.txt"
+          for asset in release-assets/*; do
+            name="$(basename "$asset")"
+            if grep -Fxq "$name" "$RUNNER_TEMP/existing-assets.txt"; then
+              mkdir -p "$RUNNER_TEMP/existing-bottle"
+              gh release download "$tag" --pattern "$name" --dir "$RUNNER_TEMP/existing-bottle"
+              cmp "$asset" "$RUNNER_TEMP/existing-bottle/$name" || { echo 'Existing asset differs; inspect the tap release instead of replacing a published bottle'; exit 1; }
+            else
+              gh release upload "$tag" "$asset"
+            fi
+          done
+          gh release edit "$tag" --draft=false --latest=false
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- Formula/clivoy.rb
+          git commit -m "clivoy: add $VERSION arm64_tahoe bottle"
+          git push origin HEAD:main
+
+  verify-install:
+    needs: [prepare, bottle]
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: Homebrew/actions/setup-homebrew@1f8e202ffddf94def7f42f6fa3a482e821489f9c # 2026.07.10.1
+        with:
+          stable: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: arm64-tahoe-bottle
+          path: expected
+      - name: Verify a normal public tap install pours the bottle
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout --detach origin/main
+          brew install "$FORMULA"
+          brew test "$FORMULA"
+          export CLIVOY_PREFIX="$(brew --prefix "$FORMULA")"
+          python3 - <<'PY'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+          prefix = Path(os.environ['CLIVOY_PREFIX'])
+          receipt = json.loads((prefix / 'INSTALL_RECEIPT.json').read_text())
+          if receipt.get('poured_from_bottle') is not True:
+              raise SystemExit('Normal installation did not pour the public bottle')
+          expected = Path('expected/binary.sha256').read_text().split()[0]
+          if hashlib.sha256((prefix / 'bin/clivoy').read_bytes()).hexdigest() != expected:
+              raise SystemExit('Installed binary differs from the original release')
+          result = subprocess.check_output([str(prefix / 'bin/clivoy'), 'version'], text=True).strip()
+          if not re.fullmatch(r'clivoy ' + re.escape(os.environ['VERSION']) + r' \(commit [^,]+, built [^)]+\)', result):
+              raise SystemExit(f'Unexpected version: {result}')
+          print(f'Public bottle installation verified: {result}; sha256={expected}')
+          PY
