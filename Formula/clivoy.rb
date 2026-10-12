@@ -5,6 +5,11 @@ class Clivoy < Formula
   version "1.0.1"
   license "Apache-2.0"
 
+  bottle do
+    root_url "https://github.com/wklee610/homebrew-clivoy/releases/download/clivoy-1.0.1"
+    sha256 cellar: :any_skip_relocation, arm64_tahoe: "3821acbef49ba96c46c82acc17927c790c14edf9d33134da6783dc3fbdc960ee"
+  end
+
   on_macos do
     on_arm do
       url "https://github.com/wklee610/clivoy/releases/download/v1.0.1/clivoy_1.0.1_darwin_arm64.tar.gz"
