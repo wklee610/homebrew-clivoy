@@ -2,33 +2,28 @@
 class Clivoy < Formula
   desc "Local coding CLI and model server API gateway"
   homepage "https://github.com/wklee610/clivoy"
-  version "1.0.0"
+  version "1.0.1"
   license "Apache-2.0"
-
-  bottle do
-    root_url "https://github.com/wklee610/homebrew-clivoy/releases/download/clivoy-1.0.0"
-    sha256 cellar: :any_skip_relocation, arm64_tahoe: "83b485cf4796bb5480be86fe6d4d49bab65348ad9ab16d39c18592c8b1b5ff20"
-  end
 
   on_macos do
     on_arm do
-      url "https://github.com/wklee610/clivoy/releases/download/v1.0.0/clivoy_1.0.0_darwin_arm64.tar.gz"
-      sha256 "04eb9eb1accdabbd8983cbb30fb0e1d0f1cbfb067759bf4b2d1b7ddae7a11273"
+      url "https://github.com/wklee610/clivoy/releases/download/v1.0.1/clivoy_1.0.1_darwin_arm64.tar.gz"
+      sha256 "b82f28ed676826da26ea1757c4120dc26b135ac196a44b03f234975c565a2b45"
     end
     on_intel do
-      url "https://github.com/wklee610/clivoy/releases/download/v1.0.0/clivoy_1.0.0_darwin_amd64.tar.gz"
-      sha256 "ea0e5eeaf79e65a5cb52c6373519098e38a527ad951017091cc5f1c0392c7acf"
+      url "https://github.com/wklee610/clivoy/releases/download/v1.0.1/clivoy_1.0.1_darwin_amd64.tar.gz"
+      sha256 "6872ce585becd1ce505671e474f12377e61f69e65d4d927c51502a0493582faa"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/wklee610/clivoy/releases/download/v1.0.0/clivoy_1.0.0_linux_arm64.tar.gz"
-      sha256 "9e2ee1a751889dd972d52ef09f6cb6d5563b148f5854bbf7af493b06e23196dc"
+      url "https://github.com/wklee610/clivoy/releases/download/v1.0.1/clivoy_1.0.1_linux_arm64.tar.gz"
+      sha256 "72024670b035216c4f17f5c487da2675ccec1ce5620e28ad02c1944a7e483f94"
     end
     on_intel do
-      url "https://github.com/wklee610/clivoy/releases/download/v1.0.0/clivoy_1.0.0_linux_amd64.tar.gz"
-      sha256 "92a935bd930dc496d8175de832f2683d141746b14b4d43c3aaf22c82c12a8fee"
+      url "https://github.com/wklee610/clivoy/releases/download/v1.0.1/clivoy_1.0.1_linux_amd64.tar.gz"
+      sha256 "232a1ffca65d7d125b985b4a28f877d78a272cddaf9e6819b99693087f597034"
     end
   end
 
