@@ -2,33 +2,28 @@
 class Clivoy < Formula
   desc "Local coding CLI and model server API gateway"
   homepage "https://github.com/wklee610/clivoy"
-  version "1.0.1"
+  version "1.1.0"
   license "Apache-2.0"
-
-  bottle do
-    root_url "https://github.com/wklee610/homebrew-clivoy/releases/download/clivoy-1.0.1"
-    sha256 cellar: :any_skip_relocation, arm64_tahoe: "3821acbef49ba96c46c82acc17927c790c14edf9d33134da6783dc3fbdc960ee"
-  end
 
   on_macos do
     on_arm do
-      url "https://github.com/wklee610/clivoy/releases/download/v1.0.1/clivoy_1.0.1_darwin_arm64.tar.gz"
-      sha256 "b82f28ed676826da26ea1757c4120dc26b135ac196a44b03f234975c565a2b45"
+      url "https://github.com/wklee610/clivoy/releases/download/v1.1.0/clivoy_1.1.0_darwin_arm64.tar.gz"
+      sha256 "5da481757b846e4e1c6d8ce879be68a2fd6327ea6ca3783fbca8427b97608da9"
     end
     on_intel do
-      url "https://github.com/wklee610/clivoy/releases/download/v1.0.1/clivoy_1.0.1_darwin_amd64.tar.gz"
-      sha256 "6872ce585becd1ce505671e474f12377e61f69e65d4d927c51502a0493582faa"
+      url "https://github.com/wklee610/clivoy/releases/download/v1.1.0/clivoy_1.1.0_darwin_amd64.tar.gz"
+      sha256 "d49c16eafc369dd27b26bfdc6c872f28ff1c043f408d0c9c3a171975ee48a944"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/wklee610/clivoy/releases/download/v1.0.1/clivoy_1.0.1_linux_arm64.tar.gz"
-      sha256 "72024670b035216c4f17f5c487da2675ccec1ce5620e28ad02c1944a7e483f94"
+      url "https://github.com/wklee610/clivoy/releases/download/v1.1.0/clivoy_1.1.0_linux_arm64.tar.gz"
+      sha256 "369060cdf750a86eac4f0d97b5120cc9006ea2bf181b04dfde1d6e2592603169"
     end
     on_intel do
-      url "https://github.com/wklee610/clivoy/releases/download/v1.0.1/clivoy_1.0.1_linux_amd64.tar.gz"
-      sha256 "232a1ffca65d7d125b985b4a28f877d78a272cddaf9e6819b99693087f597034"
+      url "https://github.com/wklee610/clivoy/releases/download/v1.1.0/clivoy_1.1.0_linux_amd64.tar.gz"
+      sha256 "92c205916142c4d353a6f9fe5bc19305f45a53b520beedf90eb15bbefc5ead1c"
     end
   end
 
